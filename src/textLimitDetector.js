@@ -92,4 +92,4 @@ function detectLimit(text) {
   return null;
 }
 
-module.exports = { clean, isClaudeCommand, detectLimit };
+module.exports = { clean, isClaudeCommand, detectLimit, nextLocalTime };
