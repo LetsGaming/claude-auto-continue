@@ -2,9 +2,10 @@
   "name": "claude-auto-continue",
   "displayName": "Claude Auto Continue",
   "description": "Automatically continues Claude Code sessions on schedule and after usage-limit resets.",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "publisher": "local",
   "license": "MIT",
+  "icon": "resources/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/letsgaming/claude-auto-continue.git"
