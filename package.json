@@ -1,0 +1,46 @@
+{
+  "name": "claude-auto-continue",
+  "displayName": "Claude Auto Continue",
+  "description": "Automatically continues Claude Code sessions on schedule and after usage-limit resets.",
+  "version": "1.0.7",
+  "publisher": "local",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/letsgaming/claude-auto-continue.git"
+  },
+  "engines": { "vscode": ">=1.93.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "install-extension": "node scripts/install.js",
+    "build:release": "node scripts/build.js",
+    "install:release": "node scripts/install.js"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.6.0"
+  },
+  "contributes": {
+    "commands": [
+      { "command": "claudeAutoContinue.runNow", "title": "Claude Auto Continue: Continue All Sessions Now" },
+      { "command": "claudeAutoContinue.showStatus", "title": "Claude Auto Continue: Show Status" },
+      { "command": "claudeAutoContinue.openLogs", "title": "Claude Auto Continue: Open Logs" },
+      { "command": "claudeAutoContinue.toggle", "title": "Claude Auto Continue: Toggle" }
+    ],
+    "configuration": {
+      "title": "Claude Auto Continue",
+      "properties": {
+        "claudeAutoContinue.enabled": { "type": "boolean", "default": true, "description": "Master switch for the extension. Turning this off disables both auto-detected limit-reset continuation and scheduled continuation." },
+        "claudeAutoContinue.detectLimits": { "type": "boolean", "default": true, "description": "Auto-detect: watch Claude Code terminal output for usage-limit messages and automatically continue once the detected reset time passes. This is the default behavior." },
+        "claudeAutoContinue.scheduledContinueEnabled": { "type": "boolean", "default": false, "description": "Also send the continuation message at a fixed daily time (claudeAutoContinue.scheduledTime), independent of limit detection. Off by default." },
+        "claudeAutoContinue.scheduledTime": { "type": "string", "default": "19:30", "description": "Daily time to send the continuation message, when claudeAutoContinue.scheduledContinueEnabled is on. Format HH:mm." },
+        "claudeAutoContinue.message": { "type": "string", "default": "Continue working on the current task. Do not ask me for confirmation, clarification, or additional user input. You have permission to continue autonomously. Review the current state and proceed with the remaining work.", "description": "Message sent to Claude when continuing." },
+        "claudeAutoContinue.resetGraceSeconds": { "type": "number", "default": 15, "minimum": 0, "maximum": 300, "description": "Extra delay after a detected reset time before continuing." },
+        "claudeAutoContinue.retrySeconds": { "type": "number", "default": 30, "minimum": 5, "maximum": 600, "description": "Retry interval if a Claude terminal cannot currently accept the continuation." },
+        "claudeAutoContinue.debug": { "type": "boolean", "default": false, "description": "Log detected terminal output and parser decisions to the extension host console." }
+      }
+    }
+  }
+}

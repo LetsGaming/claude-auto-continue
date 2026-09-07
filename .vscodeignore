@@ -1,0 +1,10 @@
+.remember/**
+.vscode/**
+.git/**
+.gitignore
+**/*.map
+node_modules/**
+scripts/**
+package-lock.json
+*.vsix
+.vscodeignore
