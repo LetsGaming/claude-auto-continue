@@ -1,4 +1,4 @@
-const MAX = 200;
+let MAX = 200;
 
 const EVENTS = Object.freeze({
   CLAUDE_DETECTED: 'claude-detected',
@@ -41,4 +41,10 @@ function clear() {
   entries = [];
 }
 
-module.exports = { record, recent, all, clear, EVENTS };
+function setLimit(n) {
+  if (!Number.isInteger(n) || n <= 0) return;
+  MAX = n;
+  if (entries.length > MAX) entries.splice(0, entries.length - MAX);
+}
+
+module.exports = { record, recent, all, clear, setLimit, EVENTS };

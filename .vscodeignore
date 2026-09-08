@@ -6,6 +6,7 @@
 node_modules/**
 scripts/**
 test/**
+.superpowers/**
 package-lock.json
 *.vsix
 .vscodeignore

@@ -2,6 +2,7 @@ const vscode = require('vscode');
 const logger = require('./src/logger');
 const statusBar = require('./src/statusBar');
 const sessionManager = require('./src/sessionManager');
+const history = require('./src/history');
 const config = require('./src/config');
 const { cfg, enabled } = config;
 const { isClaudeCommand, clean, detectLimit } = require('./src/textLimitDetector');
@@ -17,6 +18,7 @@ function activate(context) {
     outputChannel.show(true);
   }
   logger.init(outputChannel);
+  history.setLimit(cfg().get('historyLimit', 200));
 
   statusBar.create(context);
   sessionManager.onChange(updateStatus);
@@ -48,7 +50,10 @@ function activate(context) {
     updateStatus();
   }));
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
-    if (e.affectsConfiguration('claudeAutoContinue')) updateStatus();
+    if (e.affectsConfiguration('claudeAutoContinue')) {
+      history.setLimit(cfg().get('historyLimit', 200));
+      updateStatus();
+    }
   }));
 
   timer = setInterval(() => {

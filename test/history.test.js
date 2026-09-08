@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { record, recent, all, clear, EVENTS } = require('../src/history.js');
+const { record, recent, all, clear, setLimit, EVENTS } = require('../src/history.js');
 
 test('recording more than MAX entries caps buffer at 200 and drops oldest', () => {
   clear();
@@ -41,6 +41,43 @@ test('all() returns a copy, not the live array', () => {
   const copy2 = recent(10);
   copy2.pop();
   assert.equal(all().length, 1);
+  clear();
+});
+
+test('setLimit(n) caps future records and immediately trims an oversized buffer', () => {
+  clear();
+
+  // buffer already has more entries than the new limit: setLimit must trim it down
+  // immediately, not just on the next overflowing record().
+  for (let i = 0; i < 8; i++) {
+    record(EVENTS.CONTINUE_SENT, 'term', `entry-${i}`);
+  }
+  assert.equal(all().length, 8);
+  setLimit(5);
+  let everything = all();
+  assert.equal(everything.length, 5);
+  assert.equal(everything[0].detail, 'entry-3');
+  assert.equal(everything[everything.length - 1].detail, 'entry-7');
+
+  // subsequent records stay capped at the new limit.
+  record(EVENTS.CONTINUE_SENT, 'term', 'entry-8');
+  record(EVENTS.CONTINUE_SENT, 'term', 'entry-9');
+  everything = all();
+  assert.equal(everything.length, 5);
+  assert.equal(everything[0].detail, 'entry-5');
+  assert.equal(everything[everything.length - 1].detail, 'entry-9');
+
+  // invalid values are ignored (no-op) rather than throwing or changing the cap.
+  setLimit(0);
+  setLimit(-1);
+  setLimit(1.5);
+  setLimit('10');
+  record(EVENTS.CONTINUE_SENT, 'term', 'entry-10');
+  everything = all();
+  assert.equal(everything.length, 5);
+  assert.equal(everything[everything.length - 1].detail, 'entry-10');
+
+  setLimit(200);
   clear();
 });
 
