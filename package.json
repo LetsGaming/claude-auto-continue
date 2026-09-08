@@ -2,7 +2,7 @@
   "name": "claude-auto-continue",
   "displayName": "Claude Auto Continue",
   "description": "Automatically continues Claude Code sessions on schedule and after usage-limit resets.",
-  "version": "1.0.8",
+  "version": "1.1.0",
   "publisher": "local",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -29,7 +29,11 @@
       { "command": "claudeAutoContinue.runNow", "title": "Claude Auto Continue: Continue All Sessions Now" },
       { "command": "claudeAutoContinue.showStatus", "title": "Claude Auto Continue: Show Status" },
       { "command": "claudeAutoContinue.openLogs", "title": "Claude Auto Continue: Open Logs" },
-      { "command": "claudeAutoContinue.toggle", "title": "Claude Auto Continue: Toggle" }
+      { "command": "claudeAutoContinue.toggle", "title": "Claude Auto Continue: Toggle" },
+      { "command": "claudeAutoContinue.setResetTime", "title": "Claude Auto Continue: Set Reset Time…" },
+      { "command": "claudeAutoContinue.togglePause", "title": "Claude Auto Continue: Toggle Pause for Terminal…" },
+      { "command": "claudeAutoContinue.selectMessageProfile", "title": "Claude Auto Continue: Select Message Profile…" },
+      { "command": "claudeAutoContinue.showHistory", "title": "Claude Auto Continue: Show Recent Activity" }
     ],
     "configuration": {
       "title": "Claude Auto Continue",
@@ -41,7 +45,17 @@
         "claudeAutoContinue.message": { "type": "string", "default": "Continue working on the current task. Do not ask me for confirmation, clarification, or additional user input. You have permission to continue autonomously. Review the current state and proceed with the remaining work.", "description": "Message sent to Claude when continuing." },
         "claudeAutoContinue.resetGraceSeconds": { "type": "number", "default": 15, "minimum": 0, "maximum": 300, "description": "Extra delay after a detected reset time before continuing." },
         "claudeAutoContinue.retrySeconds": { "type": "number", "default": 30, "minimum": 5, "maximum": 600, "description": "Retry interval if a Claude terminal cannot currently accept the continuation." },
-        "claudeAutoContinue.debug": { "type": "boolean", "default": false, "description": "Log detected terminal output and parser decisions to the extension host console." }
+        "claudeAutoContinue.debug": { "type": "boolean", "default": false, "description": "Log detected terminal output and parser decisions to the extension host console." },
+        "claudeAutoContinue.notifyOnLimitDetected": { "type": "boolean", "default": true, "description": "Show a VS Code notification when a usage-limit is detected in a Claude terminal." },
+        "claudeAutoContinue.notifyOnSend": { "type": "boolean", "default": true, "description": "Show a VS Code notification when a continuation message is sent to a Claude terminal." },
+        "claudeAutoContinue.soundOnSend": { "type": "boolean", "default": false, "description": "Play a sound when a continuation message is sent. Off by default." },
+        "claudeAutoContinue.messageProfiles": { "type": "object", "default": {}, "additionalProperties": { "type": "string" }, "description": "Named message profiles as a name-to-message map, selectable via the \"Select Message Profile…\" command." },
+        "claudeAutoContinue.messageProfile": { "type": "string", "default": "", "description": "Default message profile name to use, looked up in claudeAutoContinue.messageProfiles. Falls back to claudeAutoContinue.message when empty or not found." },
+        "claudeAutoContinue.scheduledTimes": { "type": "array", "default": [], "items": { "type": "string" }, "description": "List of daily HH:mm times to send the continuation message. An empty list falls back to the legacy claudeAutoContinue.scheduledTime setting." },
+        "claudeAutoContinue.maxRetries": { "type": "number", "default": 10, "minimum": 0, "maximum": 100, "description": "Maximum number of retries when a continuation message cannot be sent." },
+        "claudeAutoContinue.retryBackoff": { "type": "boolean", "default": true, "description": "Increase the delay between retries with each attempt, up to claudeAutoContinue.retryMaxSeconds." },
+        "claudeAutoContinue.retryMaxSeconds": { "type": "number", "default": 600, "minimum": 5, "maximum": 3600, "description": "Maximum retry interval in seconds when claudeAutoContinue.retryBackoff is on." },
+        "claudeAutoContinue.historyLimit": { "type": "number", "default": 200, "minimum": 10, "maximum": 1000, "description": "Maximum number of recent activity entries to keep for the \"Show Recent Activity\" command." }
       }
     }
   }

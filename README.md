@@ -15,14 +15,24 @@ VS Code extension that automatically continues Claude Code sessions.
 - Parses reset times such as `resets at 21:47`, `try again at 21:47`, bare `7pm` (no minutes), and `try again in 30 minutes`.
 - Schedules per-terminal automatic continuation after reset.
 - Retries when a reset time cannot be parsed.
-- Status-bar indicator and status command.
+- Status-bar indicator and status command, with a hover tooltip showing active/limited/paused counts, the next scheduled action, and recent activity.
 - Existing Claude sessions can still be found for scheduled/manual continuation using process-tree detection.
+- Optional notifications when a usage-limit is detected and when a continuation message is sent (`claudeAutoContinue.notifyOnLimitDetected`, `claudeAutoContinue.notifyOnSend`).
+- Optional sound on send when a continuation message is sent (`claudeAutoContinue.soundOnSend`, off by default).
+- Manual `Claude Auto Continue: Set Reset Time…` command to tell the extension when a limit resets when auto-detection misses it (see "Important limitation" below).
+- Named message profiles (`claudeAutoContinue.messageProfiles`) selectable per-session via `Claude Auto Continue: Select Message Profile…`.
+- Per-terminal pause with `Claude Auto Continue: Toggle Pause for Terminal…`, so a session can be excluded from auto-continuation without disabling the extension.
+- Multi-time daily scheduling (`claudeAutoContinue.scheduledTimes`) in addition to the legacy single `scheduledTime`.
+- Retry backoff with a configurable cap (`claudeAutoContinue.retryBackoff`, `claudeAutoContinue.retryMaxSeconds`) and a configurable retry limit (`claudeAutoContinue.maxRetries`).
+- `Claude Auto Continue: Show Recent Activity` command to review recent detections, sends, retries, and pause/resume events.
 
 ## Important limitation
 
 VS Code exposes terminal output as a stream only when the extension attaches to the shell execution when it starts. Therefore, automatic **limit detection** is most reliable for Claude sessions started/restarted after this extension is loaded. Scheduled/manual discovery can still find already-running Claude sessions by process tree, but VS Code does not provide a retroactive terminal-output stream for an execution that started before the extension attached.
 
 VS Code's terminal shell integration must be enabled. On Windows, VS Code supports shell integration for PowerShell and Git Bash. See the official VS Code documentation.
+
+When auto-detection misses a session (the scenario above), run `Claude Auto Continue: Set Reset Time…` to manually tell the extension when that session's limit resets.
 
 ## Multiple VS Code windows
 
@@ -68,8 +78,27 @@ code --install-extension .\claude-auto-continue-1.0.0.vsix
 }
 ```
 
+## New settings (v1.1.0)
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `claudeAutoContinue.notifyOnLimitDetected` | boolean | `true` | Notify when a usage-limit is detected. |
+| `claudeAutoContinue.notifyOnSend` | boolean | `true` | Notify when a continuation message is sent. |
+| `claudeAutoContinue.soundOnSend` | boolean | `false` | Play a sound when a continuation message is sent. |
+| `claudeAutoContinue.messageProfiles` | object | `{}` | Name-to-message map, selectable via `Select Message Profile…`. |
+| `claudeAutoContinue.messageProfile` | string | `""` | Default profile name to use from `messageProfiles`. |
+| `claudeAutoContinue.scheduledTimes` | array | `[]` | List of daily `HH:mm` times; empty falls back to `scheduledTime`. |
+| `claudeAutoContinue.maxRetries` | number | `10` | Maximum retries when a message cannot be sent. |
+| `claudeAutoContinue.retryBackoff` | boolean | `true` | Increase the delay between retries, up to `retryMaxSeconds`. |
+| `claudeAutoContinue.retryMaxSeconds` | number | `600` | Maximum retry interval in seconds when `retryBackoff` is on. |
+| `claudeAutoContinue.historyLimit` | number | `200` | Maximum number of recent activity entries kept. |
+
 ## Commands
 
 - `Claude Auto Continue: Continue All Sessions Now`
 - `Claude Auto Continue: Show Status`
 - `Claude Auto Continue: Toggle`
+- `Claude Auto Continue: Set Reset Time…`
+- `Claude Auto Continue: Toggle Pause for Terminal…`
+- `Claude Auto Continue: Select Message Profile…`
+- `Claude Auto Continue: Show Recent Activity`

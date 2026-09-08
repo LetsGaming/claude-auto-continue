@@ -5,6 +5,7 @@
 **/*.map
 node_modules/**
 scripts/**
+test/**
 package-lock.json
 *.vsix
 .vscodeignore
