@@ -10,6 +10,7 @@ async function pickSession(sessionManager, { claudeOnly = true } = {}) {
       if (session.limit) flags.push('limited');
       if (session.paused) flags.push('paused');
       if (session.messageProfile) flags.push(`profile: ${session.messageProfile}`);
+      if (session.oneTimeMessage) flags.push('one-time msg queued');
       items.push({ label: session.terminal.name, description: flags.join(' · '), session });
     }
   } else {
@@ -19,6 +20,7 @@ async function pickSession(sessionManager, { claudeOnly = true } = {}) {
       if (session.limit) flags.push('limited');
       if (session.paused) flags.push('paused');
       if (session.messageProfile) flags.push(`profile: ${session.messageProfile}`);
+      if (session.oneTimeMessage) flags.push('one-time msg queued');
       items.push({ label: session.terminal.name, description: flags.join(' · '), session });
     }
   }
@@ -88,6 +90,63 @@ async function selectMessageProfile(sessionManager) {
   vscode.window.showInformationMessage(`Message profile for "${session.terminal.name}" set to ${picked}.`);
 }
 
+async function setOneTimeMessage(sessionManager) {
+  const session = await pickSession(sessionManager, { claudeOnly: false });
+  if (!session) return;
+
+  const input = await vscode.window.showInputBox({
+    prompt: `One-time message for "${session.terminal.name}" — sent instead of the usual message the next time this session continues (on limit reset or the next scheduled run), then forgotten`,
+    placeHolder: 'e.g. Now that the limit reset, please also update the README',
+    value: session.oneTimeMessage || ''
+  });
+  if (input === undefined) return;
+
+  sessionManager.setOneTimeMessage(session, input.trim());
+  vscode.window.showInformationMessage(
+    input.trim()
+      ? `Queued a one-time message for "${session.terminal.name}".`
+      : `Cleared the queued one-time message for "${session.terminal.name}".`
+  );
+}
+
+async function scheduleOnceMessage(sessionManager) {
+  const items = [{ label: 'All Claude Sessions', session: null }];
+  for (const session of sessionManager.sessions.values()) {
+    if (!session.isClaude) continue;
+    items.push({ label: session.terminal.name, session });
+  }
+  for (const terminal of vscode.window.terminals) {
+    if (items.some(i => i.session?.terminal === terminal)) continue;
+    items.push({ label: terminal.name, session: sessionManager.sessionFor(terminal) });
+  }
+
+  const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Send the one-time message to…' });
+  if (!picked) return;
+
+  const timeInput = await vscode.window.showInputBox({
+    prompt: 'When should this be sent? (e.g. 21:47, 9:47pm, 7pm, +90m, +2h, in 45 minutes)',
+    placeHolder: '7pm'
+  });
+  if (!timeInput) return;
+
+  const { parseManualTime } = require('./timeInput');
+  const at = parseManualTime(timeInput);
+  if (at === null) {
+    vscode.window.showErrorMessage(`Could not parse "${timeInput}" as a time.`);
+    return;
+  }
+
+  const message = await vscode.window.showInputBox({
+    prompt: 'Message to send (leave blank to use the normal continuation message)',
+    placeHolder: 'e.g. Start working on the payment integration task'
+  });
+  if (message === undefined) return;
+
+  if (picked.session) picked.session.isClaude = true;
+  sessionManager.scheduleOnceMessage(picked.session, at, message.trim());
+  vscode.window.showInformationMessage(`Scheduled a one-time message for ${picked.label} at ${at.toLocaleString()}.`);
+}
+
 async function showHistory() {
   const { recent } = require('./history');
   const events = recent(50);
@@ -104,4 +163,4 @@ async function showHistory() {
   await vscode.window.showQuickPick(items, { placeHolder: 'Recent activity (read-only)' });
 }
 
-module.exports = { setResetTime, togglePause, selectMessageProfile, showHistory };
+module.exports = { setResetTime, togglePause, selectMessageProfile, showHistory, setOneTimeMessage, scheduleOnceMessage };

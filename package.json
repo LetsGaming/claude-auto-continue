@@ -2,7 +2,7 @@
   "name": "claude-auto-continue",
   "displayName": "Claude Auto Continue",
   "description": "Automatically continues Claude Code sessions on schedule and after usage-limit resets.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "local",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -33,7 +33,9 @@
       { "command": "claudeAutoContinue.setResetTime", "title": "Claude Auto Continue: Set Reset Time…" },
       { "command": "claudeAutoContinue.togglePause", "title": "Claude Auto Continue: Toggle Pause for Terminal…" },
       { "command": "claudeAutoContinue.selectMessageProfile", "title": "Claude Auto Continue: Select Message Profile…" },
-      { "command": "claudeAutoContinue.showHistory", "title": "Claude Auto Continue: Show Recent Activity" }
+      { "command": "claudeAutoContinue.showHistory", "title": "Claude Auto Continue: Show Recent Activity" },
+      { "command": "claudeAutoContinue.setOneTimeMessage", "title": "Claude Auto Continue: Set One-Time Message for Next Send…" },
+      { "command": "claudeAutoContinue.scheduleOnceMessage", "title": "Claude Auto Continue: Schedule One-Time Message…" }
     ],
     "configuration": {
       "title": "Claude Auto Continue",

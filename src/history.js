@@ -11,7 +11,9 @@ const EVENTS = Object.freeze({
   SCHEDULED_RUN: 'scheduled-run',
   PAUSED: 'paused',
   RESUMED: 'resumed',
-  PROFILE_SET: 'profile-set'
+  PROFILE_SET: 'profile-set',
+  ONE_TIME_MESSAGE_SET: 'one-time-message-set',
+  ONE_TIME_SCHEDULED: 'one-time-scheduled'
 });
 
 let entries = [];

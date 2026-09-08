@@ -31,6 +31,8 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.togglePause', () => commands.togglePause(sessionManager)));
   context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.selectMessageProfile', () => commands.selectMessageProfile(sessionManager)));
   context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.showHistory', () => commands.showHistory()));
+  context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.setOneTimeMessage', () => commands.setOneTimeMessage(sessionManager)));
+  context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.scheduleOnceMessage', () => commands.scheduleOnceMessage(sessionManager)));
 
   context.subscriptions.push(vscode.window.onDidStartTerminalShellExecution(event => monitorExecution(event).catch(err => logger.logError(err))));
   context.subscriptions.push(vscode.window.onDidCloseTerminal(terminal => {

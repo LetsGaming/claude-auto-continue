@@ -36,7 +36,8 @@ function sessionFor(terminal) {
       transcript: null,
       source: 'shell-integration',
       paused: false,
-      messageProfile: null
+      messageProfile: null,
+      oneTimeMessage: null
     };
     sessions.set(terminal, s);
   }
@@ -127,11 +128,11 @@ async function continueSessionWhenReady(session, reason) {
     return;
   }
 
-  await sendContinue(session, reason);
+  await sendContinue(session, reason, session.oneTimeMessage);
 }
 
-async function sendContinue(session, reason) {
-  const message = config.resolveMessage(session);
+async function sendContinue(session, reason, overrideMessage) {
+  const message = overrideMessage || config.resolveMessage(session);
 
   try {
     // sendText writes to the integrated terminal's stdin. It does not require the terminal to be focused.
@@ -150,6 +151,7 @@ async function sendContinue(session, reason) {
     // the still-stale (pre-send) screen once more before the new command is actually
     // processed, and that stale redraw must not be misread as a fresh limit hit.
     session.cooldownUntil = Date.now() + 10000;
+    if (overrideMessage && overrideMessage === session.oneTimeMessage) session.oneTimeMessage = null;
     logger.log(`Sent automatic continuation to ${session.terminal.name} (${reason}).`);
     notifyChange();
   } catch (error) {
@@ -202,7 +204,7 @@ async function continueAll(reason) {
       skipped += 1;
       continue;
     }
-    await sendContinue(session, reason);
+    await sendContinue(session, reason, session.oneTimeMessage);
   }
   if (skipped > 0) {
     logger.log(`Skipped ${skipped} paused session(s).`);
@@ -237,6 +239,8 @@ function disposeAll() {
     detachTranscriptWatcher(session);
   }
   transcriptWatcher.disposeAll();
+  for (const timer of oneTimeTimers) clearTimeout(timer);
+  oneTimeTimers.clear();
 }
 
 function setPaused(session, paused) {
@@ -255,6 +259,47 @@ function setMessageProfile(session, name) {
   notifyChange();
 }
 
+function setOneTimeMessage(session, message) {
+  session.oneTimeMessage = message || null;
+  history.record(history.EVENTS.ONE_TIME_MESSAGE_SET, session.terminal.name, session.oneTimeMessage ? 'queued' : 'cleared');
+  notifyChange();
+}
+
+const oneTimeTimers = new Set();
+
+// Fires a custom message once at an arbitrary future time, independent of both limit
+// detection and the recurring daily schedule. `session` is a specific session to target,
+// or null/undefined to broadcast to every currently-known Claude session (evaluated at
+// fire time, so sessions detected later are still included).
+function scheduleOnceMessage(session, at, message) {
+  const delay = Math.max(0, at.getTime() - Date.now());
+  const label = session ? session.terminal.name : 'all Claude sessions';
+  history.record(history.EVENTS.ONE_TIME_SCHEDULED, session ? session.terminal.name : '*', `at ${at.toLocaleString()}`);
+  logger.log(`One-time message scheduled for ${label} at ${at.toString()}.`);
+
+  const timer = setTimeout(async () => {
+    oneTimeTimers.delete(timer);
+    if (!enabled()) return;
+    if (session) {
+      if (!vscode.window.terminals.includes(session.terminal)) return;
+      if (session.paused) {
+        logger.log(`Skipped one-time message for paused terminal "${session.terminal.name}".`);
+        return;
+      }
+      await sendContinue(session, 'one-time-schedule', message || undefined);
+      return;
+    }
+
+    for (const terminal of vscode.window.terminals) {
+      const s = sessions.get(terminal)?.isClaude ? sessions.get(terminal) : await markIfClaude(terminal);
+      if (!s || s.paused) continue;
+      await sendContinue(s, 'one-time-schedule', message || undefined);
+    }
+  }, delay);
+  oneTimeTimers.add(timer);
+  return timer;
+}
+
 module.exports = {
   sessions,
   sessionFor,
@@ -268,5 +313,7 @@ module.exports = {
   disposeAll,
   onChange,
   setPaused,
-  setMessageProfile
+  setMessageProfile,
+  setOneTimeMessage,
+  scheduleOnceMessage
 };
