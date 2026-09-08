@@ -67,6 +67,7 @@ async function handleLimit(session, limit, opts = {}) {
 
   session.limit = true;
   session.resetAt = limit.resetAt;
+  session.retryCount = 0;
   logger.log(`Limit detected in ${session.terminal.name}. Reset=${limit.resetAt?.toString() || 'unknown'}`);
 
   history.record(
@@ -151,16 +152,18 @@ async function sendContinue(session, reason) {
     session.cooldownUntil = Date.now() + 10000;
     logger.log(`Sent automatic continuation to ${session.terminal.name} (${reason}).`);
     notifyChange();
-    history.record(history.EVENTS.CONTINUE_SENT, session.terminal.name, reason || '');
-    notify.continueSent(session, reason);
-    if (cfg().get('soundOnSend', false)) {
-      sound.play();
-    }
   } catch (error) {
     logger.log(`Could not send continuation to ${session.terminal.name}: ${error.message || error}`);
     history.record(history.EVENTS.SEND_FAILED, session.terminal.name, String(error?.message || error));
     notify.sendFailed(session, error);
     scheduleRetry(session);
+    return;
+  }
+
+  history.record(history.EVENTS.CONTINUE_SENT, session.terminal.name, reason || '');
+  notify.continueSent(session, reason);
+  if (cfg().get('soundOnSend', false)) {
+    sound.play();
   }
 }
 
@@ -237,9 +240,13 @@ function disposeAll() {
 }
 
 function setPaused(session, paused) {
+  const wasPaused = session.paused;
   session.paused = Boolean(paused);
   history.record(paused ? history.EVENTS.PAUSED : history.EVENTS.RESUMED, session.terminal.name, '');
   notifyChange();
+  if (wasPaused && !session.paused && session.limit) {
+    continueSessionWhenReady(session, 'resumed').catch(err => logger.logError(err));
+  }
 }
 
 function setMessageProfile(session, name) {

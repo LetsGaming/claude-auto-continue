@@ -13,6 +13,8 @@ function create(context) {
 }
 
 function computeNextAction(limited) {
+  if (!enabled()) return 'Disabled';
+
   let best = null;
 
   for (const s of limited) {
@@ -67,7 +69,7 @@ function update(sessions) {
     }
   }
 
-  statusBar.tooltip = new vscode.MarkdownString(lines.join('\n'));
+  statusBar.tooltip = new vscode.MarkdownString(lines.join('  \n'));
   statusBar.show();
 }
 
@@ -76,7 +78,7 @@ async function showStatus(sessions) {
   const lines = [
     `Enabled: ${enabled()}`,
     `Auto-detect (limit reset): ${cfg().get('detectLimits', true)}`,
-    `Scheduled continuation: ${scheduledOn ? `on (${cfg().get('scheduledTime', '19:30')})` : 'off'}`,
+    `Scheduled continuation: ${scheduledOn ? `on (${scheduledTimes().join(', ')})` : 'off'}`,
     ''
   ];
   let pausedCount = 0;

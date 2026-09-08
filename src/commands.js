@@ -1,18 +1,30 @@
 const vscode = require('vscode');
 
-async function pickSession(sessions, { claudeOnly = true } = {}) {
+async function pickSession(sessionManager, { claudeOnly = true } = {}) {
   const items = [];
-  for (const session of sessions.values()) {
-    if (claudeOnly && !session.isClaude) continue;
-    const flags = [];
-    if (session.limit) flags.push('limited');
-    if (session.paused) flags.push('paused');
-    if (session.messageProfile) flags.push(`profile: ${session.messageProfile}`);
-    items.push({ label: session.terminal.name, description: flags.join(' · '), session });
+
+  if (claudeOnly) {
+    for (const session of sessionManager.sessions.values()) {
+      if (!session.isClaude) continue;
+      const flags = [];
+      if (session.limit) flags.push('limited');
+      if (session.paused) flags.push('paused');
+      if (session.messageProfile) flags.push(`profile: ${session.messageProfile}`);
+      items.push({ label: session.terminal.name, description: flags.join(' · '), session });
+    }
+  } else {
+    for (const terminal of vscode.window.terminals) {
+      const session = sessionManager.sessionFor(terminal);
+      const flags = [];
+      if (session.limit) flags.push('limited');
+      if (session.paused) flags.push('paused');
+      if (session.messageProfile) flags.push(`profile: ${session.messageProfile}`);
+      items.push({ label: session.terminal.name, description: flags.join(' · '), session });
+    }
   }
 
   if (items.length === 0) {
-    vscode.window.showInformationMessage('No Claude Code terminals found.');
+    vscode.window.showInformationMessage(claudeOnly ? 'No Claude Code terminals found.' : 'No open terminals found.');
     return undefined;
   }
 
@@ -25,7 +37,7 @@ async function setResetTime(sessionManager) {
   // with a specific vscode.Terminal argument — the registered command wrapper in extension.js
   // discards that argument and calls this with just sessionManager, keeping this function's
   // signature simple and the "which terminal" logic centralized in pickSession.
-  const session = await pickSession(sessionManager.sessions, { claudeOnly: false });
+  const session = await pickSession(sessionManager, { claudeOnly: false });
   if (!session) return;
 
   const input = await vscode.window.showInputBox({
@@ -41,11 +53,12 @@ async function setResetTime(sessionManager) {
     return;
   }
 
+  session.isClaude = true;
   await sessionManager.handleLimit(session, { resetAt, raw: input }, { force: true });
 }
 
 async function togglePause(sessionManager) {
-  const session = await pickSession(sessionManager.sessions, { claudeOnly: false });
+  const session = await pickSession(sessionManager, { claudeOnly: false });
   if (!session) return;
 
   sessionManager.setPaused(session, !session.paused);
@@ -53,7 +66,7 @@ async function togglePause(sessionManager) {
 }
 
 async function selectMessageProfile(sessionManager) {
-  const session = await pickSession(sessionManager.sessions, { claudeOnly: false });
+  const session = await pickSession(sessionManager, { claudeOnly: false });
   if (!session) return;
 
   const { profileNames } = require('./config');
