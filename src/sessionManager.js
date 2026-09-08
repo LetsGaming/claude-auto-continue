@@ -1,11 +1,14 @@
 const vscode = require('vscode');
 const logger = require('./logger');
-const { cfg, enabled } = require('./config');
+const config = require('./config');
+const { cfg, enabled } = config;
 const transcriptWatcher = require('./transcriptWatcher');
 const { terminalLooksLikeClaude } = require('./processDetector');
+const history = require('./history');
+const notify = require('./notify');
+const sound = require('./sound');
 
 const sessions = new Map();
-const MAX_BLIND_RETRIES = 10;
 const changeListeners = new Set();
 
 function onChange(listener) {
@@ -31,7 +34,9 @@ function sessionFor(terminal) {
       retryCount: 0,
       cooldownUntil: 0,
       transcript: null,
-      source: 'shell-integration'
+      source: 'shell-integration',
+      paused: false,
+      messageProfile: null
     };
     sessions.set(terminal, s);
   }
@@ -54,15 +59,22 @@ function detachTranscriptWatcher(session) {
   session.transcript = null;
 }
 
-async function handleLimit(session, limit) {
+async function handleLimit(session, limit, opts = {}) {
   // Debounce repeated detections of the same limit (repeated terminal redraws, or the
   // transcript watcher and text fallback both reporting the same hit).
   const resetMs = limit.resetAt?.getTime() ?? null;
-  if (session.limit && session.resetAt?.getTime() === resetMs) return;
+  if (!opts.force && session.limit && session.resetAt?.getTime() === resetMs) return;
 
   session.limit = true;
   session.resetAt = limit.resetAt;
   logger.log(`Limit detected in ${session.terminal.name}. Reset=${limit.resetAt?.toString() || 'unknown'}`);
+
+  history.record(
+    opts.force ? history.EVENTS.LIMIT_MANUAL : history.EVENTS.LIMIT_DETECTED,
+    session.terminal.name,
+    `resets at ${limit.resetAt ? limit.resetAt.toLocaleString() : 'unknown time'}`
+  );
+  notify.limitDetected(session, limit.resetAt);
 
   if (session.retryTimer) clearTimeout(session.retryTimer);
 
@@ -80,15 +92,26 @@ async function handleLimit(session, limit) {
 function scheduleRetry(session) {
   if (session.retryTimer) clearTimeout(session.retryTimer);
   session.retryCount = (session.retryCount || 0) + 1;
-  if (session.retryCount > MAX_BLIND_RETRIES) {
-    logger.log(`Giving up on ${session.terminal.name}: limit message has no parseable reset time after ${MAX_BLIND_RETRIES} retries. Use "Continue All Sessions Now" once it clears.`);
+  const maxRetries = cfg().get('maxRetries', 10);
+  if (session.retryCount > maxRetries) {
+    logger.log(`Giving up on ${session.terminal.name}: limit message has no parseable reset time after ${maxRetries} retries. Use "Continue All Sessions Now" once it clears.`);
+    history.record(history.EVENTS.RETRY_EXHAUSTED, session.terminal.name, `${session.retryCount - 1} retries`);
+    notify.retriesExhausted(session);
     return;
   }
-  const retryMs = cfg().get('retrySeconds', 30) * 1000;
-  session.retryTimer = setTimeout(() => continueSessionWhenReady(session, 'limit-retry').catch(err => logger.logError(err)), retryMs);
+  const retrySeconds = cfg().get('retrySeconds', 30);
+  const backoffEnabled = cfg().get('retryBackoff', true);
+  const retryMaxSeconds = cfg().get('retryMaxSeconds', 600);
+  let delaySeconds = retrySeconds;
+  if (backoffEnabled) {
+    delaySeconds = Math.min(retrySeconds * Math.pow(2, session.retryCount - 1), retryMaxSeconds);
+  }
+  history.record(history.EVENTS.RETRY_SCHEDULED, session.terminal.name, `retry ${session.retryCount} in ${delaySeconds}s`);
+  session.retryTimer = setTimeout(() => continueSessionWhenReady(session, 'limit-retry').catch(err => logger.logError(err)), delaySeconds * 1000);
 }
 
 async function continueSessionWhenReady(session, reason) {
+  if (session.paused) return;
   if (!enabled()) return;
   if (!session.terminal || !vscode.window.terminals.includes(session.terminal)) return;
 
@@ -107,7 +130,7 @@ async function continueSessionWhenReady(session, reason) {
 }
 
 async function sendContinue(session, reason) {
-  const message = cfg().get('message', 'Continue working on the current task. Do not ask me for confirmation, clarification, or additional user input. You have permission to continue autonomously. Review the current state and proceed with the remaining work.');
+  const message = config.resolveMessage(session);
 
   try {
     // sendText writes to the integrated terminal's stdin. It does not require the terminal to be focused.
@@ -128,17 +151,26 @@ async function sendContinue(session, reason) {
     session.cooldownUntil = Date.now() + 10000;
     logger.log(`Sent automatic continuation to ${session.terminal.name} (${reason}).`);
     notifyChange();
+    history.record(history.EVENTS.CONTINUE_SENT, session.terminal.name, reason || '');
+    notify.continueSent(session, reason);
+    if (cfg().get('soundOnSend', false)) {
+      sound.play();
+    }
   } catch (error) {
     logger.log(`Could not send continuation to ${session.terminal.name}: ${error.message || error}`);
+    history.record(history.EVENTS.SEND_FAILED, session.terminal.name, String(error?.message || error));
+    notify.sendFailed(session, error);
     scheduleRetry(session);
   }
 }
 
 async function markIfClaude(terminal) {
-  if (sessions.get(terminal)?.isClaude) return null;
+  const existing = sessions.get(terminal);
+  if (existing?.isClaude) return null;
   if (!(await terminalLooksLikeClaude(terminal))) return null;
   const session = sessionFor(terminal);
   session.isClaude = true;
+  history.record(history.EVENTS.CLAUDE_DETECTED, terminal.name, '');
   attachTranscriptWatcher(session, terminal.shellIntegration?.cwd?.fsPath || workspaceCwdGuess());
   return session;
 }
@@ -161,8 +193,16 @@ async function continueAll(reason) {
     if (session) candidates.push(session);
   }
 
+  let skipped = 0;
   for (const session of candidates) {
+    if (session.paused) {
+      skipped += 1;
+      continue;
+    }
     await sendContinue(session, reason);
+  }
+  if (skipped > 0) {
+    logger.log(`Skipped ${skipped} paused session(s).`);
   }
 }
 
@@ -196,6 +236,18 @@ function disposeAll() {
   transcriptWatcher.disposeAll();
 }
 
+function setPaused(session, paused) {
+  session.paused = Boolean(paused);
+  history.record(paused ? history.EVENTS.PAUSED : history.EVENTS.RESUMED, session.terminal.name, '');
+  notifyChange();
+}
+
+function setMessageProfile(session, name) {
+  session.messageProfile = name || null;
+  history.record(history.EVENTS.PROFILE_SET, session.terminal.name, name || '(default)');
+  notifyChange();
+}
+
 module.exports = {
   sessions,
   sessionFor,
@@ -207,5 +259,7 @@ module.exports = {
   continueAll,
   logStartupState,
   disposeAll,
-  onChange
+  onChange,
+  setPaused,
+  setMessageProfile
 };
