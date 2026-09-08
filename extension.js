@@ -2,16 +2,20 @@ const vscode = require('vscode');
 const logger = require('./src/logger');
 const statusBar = require('./src/statusBar');
 const sessionManager = require('./src/sessionManager');
-const { cfg, enabled } = require('./src/config');
+const config = require('./src/config');
+const { cfg, enabled } = config;
 const { isClaudeCommand, clean, detectLimit } = require('./src/textLimitDetector');
+const commands = require('./src/commands');
 
 let timer;
-let lastScheduledRun = null;
+let scheduledRunKeys = new Set();
 
 function activate(context) {
   const outputChannel = vscode.window.createOutputChannel('Claude Auto Continue');
   context.subscriptions.push(outputChannel);
-  outputChannel.show(true);
+  if (cfg().get('debug', false)) {
+    outputChannel.show(true);
+  }
   logger.init(outputChannel);
 
   statusBar.create(context);
@@ -21,10 +25,15 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.showStatus', () => statusBar.showStatus(sessionManager.sessions)));
   context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.toggle', toggleEnabled));
   context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.openLogs', () => outputChannel.show(true)));
+  context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.setResetTime', () => commands.setResetTime(sessionManager)));
+  context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.togglePause', () => commands.togglePause(sessionManager)));
+  context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.selectMessageProfile', () => commands.selectMessageProfile(sessionManager)));
+  context.subscriptions.push(vscode.commands.registerCommand('claudeAutoContinue.showHistory', () => commands.showHistory()));
 
   context.subscriptions.push(vscode.window.onDidStartTerminalShellExecution(event => monitorExecution(event).catch(err => logger.logError(err))));
   context.subscriptions.push(vscode.window.onDidCloseTerminal(terminal => {
     const session = sessionManager.sessions.get(terminal);
+    if (session?.retryTimer) clearTimeout(session.retryTimer);
     if (session) sessionManager.detachTranscriptWatcher(session);
     sessionManager.sessions.delete(terminal);
   }));
@@ -69,21 +78,23 @@ async function toggleEnabled() {
 }
 
 async function checkScheduledTime() {
-  if (!enabled()) return;
-  if (!cfg().get('scheduledContinueEnabled', false)) return;
-  const value = cfg().get('scheduledTime', '19:30');
-  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
-  if (!match) return;
-  const h = Number(match[1]);
-  const m = Number(match[2]);
-  if (h > 23 || m > 59) return;
-
+  if (!enabled() || !cfg().get('scheduledContinueEnabled', false)) return;
+  const times = config.scheduledTimes();
   const now = new Date();
-  const dayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-  if (now.getHours() === h && now.getMinutes() === m && lastScheduledRun !== dayKey) {
-    lastScheduledRun = dayKey;
+  const { dueTimes } = require('./src/scheduler');
+  const due = dueTimes(now, times, scheduledRunKeys);
+  for (const t of due) {
+    const key = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}|${t}`;
+    scheduledRunKeys.add(key);
+    logger.log(`Scheduled continuation triggered for ${t}`);
+    require('./src/history').record(require('./src/history').EVENTS.SCHEDULED_RUN, '*', t);
     await sessionManager.continueAll('scheduled');
     updateStatus();
+  }
+  // prune keys not from today, to prevent unbounded growth:
+  const todayPrefix = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}|`;
+  for (const k of scheduledRunKeys) {
+    if (!k.startsWith(todayPrefix)) scheduledRunKeys.delete(k);
   }
 }
 
